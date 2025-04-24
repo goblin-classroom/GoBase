@@ -1,0 +1,38 @@
+# Бинарники Go (если билдим прямо в проект)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Кэш Go
+go.sum
+**/.DS_Store
+*.swp
+
+# Папка модуля в vendoring mode (если используется)
+vendor/
+
+# Кэш Go modules
+.gocache/
+*.modcache/
+pkg/
+bin/
+
+# Логи и временные файлы
+*.log
+*.tmp
+*.bak
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# Тестовые покрытия
+coverage.out
+
+# Если билдим в корне
+main
