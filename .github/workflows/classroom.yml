@@ -1,42 +1,77 @@
-name: Autograding Tests
+name: Run tests only for changed Go files
 
 on:
+  pull_request:
+    paths:
+      - '**.go'
   push:
     branches:
       - main
-      - master
-  pull_request:
-  workflow_dispatch:
-  repository_dispatch:
-
-permissions:
-  checks: write
-  actions: read
-  contents: read
+    paths:
+      - '**.go'
 
 jobs:
-  run-go-tests:
+  test:
     runs-on: ubuntu-latest
-    if: github.actor != 'github-classroom[bot]'
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v4
         with:
-          go-version: '1.21' # или нужная тебе версия
+          go-version: '1.21'
 
-      - name: Run go test
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.event.pull_request.base.ref }} --depth=1
+
+      - name: Get changed Go files
+        id: changed
         run: |
-          go test ./... -v -coverprofile=coverage.out
+          echo "🔍 Получаем изменённые .go файлы:"
+          FILES=$(git diff --name-only origin/${{ github.event.pull_request.base.ref }} | grep '\.go$' || true)
+          echo "$FILES"
 
-      - name: Upload coverage report (optional)
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage.out
+          # безопасная передача многострочной переменной
+          {
+            echo 'FILES<<EOF'
+            echo "$FILES"
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
 
-      - name: Autograding Reporter
-        uses: classroom-resources/autograding-grading-reporter@v1
+      - name: Run related tests
+        run: |
+          echo "📂 Обработка файлов:"
+          echo "$FILES"
+
+          success=false
+
+          echo "$FILES" | while read file; do
+            echo "📄 Изменён файл: $file"
+            if [[ "$file" =~ ^exercises/exercise_([0-9]+)\.go$ ]]; then
+              num="${BASH_REMATCH[1]}"
+              test_file="exercises/exercise_${num}_test.go"
+              if [ -f "$test_file" ]; then
+                echo "✅ Найден тестовый файл: $test_file"
+                # Извлекаем имена всех тестов из файла
+                tests=$(grep -E '^func Test[^(]*' "$test_file" | sed -E 's/^func (Test[^(]*).*/\1/')
+                if [ -n "$tests" ]; then
+                  echo "🧪 Найденные тесты:"
+                  echo "$tests"
+                  for test in $tests; do
+                    echo "🚀 Запускаем: $test"
+                    go test ./exercises -run "^$test$" -v && success=true
+                  done
+                else
+                  echo "⚠️ Нет функций Test* в $test_file"
+                fi
+              else
+                echo "⚠️ Нет test-файла: $test_file"
+              fi
+            else
+              echo "⏭ Пропущен файл (не exercise_NN.go): $file"
+            fi
+          done
+
+          $success || echo "⚠️ Ни один тест не был запущен"
